@@ -3,7 +3,7 @@ from pathlib import Path
 import re
 from natsort import natsorted
 from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import letter
+from reportlab.lib.pagesizes import A4
 import pytesseract
 from PIL import Image, ImageEnhance, ImageFilter
 
@@ -79,45 +79,53 @@ def main():
 
     # Create pdf
     pdf_path = folder / "output.pdf"
-    c = canvas.Canvas(str(pdf_path), pagesize=letter)
-    width_pt, height_pt = letter
+    c = canvas.Canvas(str(pdf_path), pagesize=A4)
+    width_pt, height_pt = A4
 
-    print("")
+    MARGIN = 20
+    AVAILABLE_HEIGHT = height_pt - 2 * MARGIN  # Available height
+    CURRENT_Y = AVAILABLE_HEIGHT
 
     for i, png_path in enumerate(png_files, 1):
-        print(f"Processing {i}/{len(png_files)}: {png_path.name}")
+        print(f"Process {i}/{len(png_files)}: {png_path.name}")
         try:
             img = Image.open(png_path)
             w, h = img.size
 
+            # OCR
             y_target = find_you_answered_y(img)
             if y_target is None:
-                print(f"  'You answered' not found, cropping skipped")
+                print("  🔄 OCR cannot determine 'You answered'")
+                y_target = int(h * 0.45)
+            if y_target <= 0 or y_target >= h:
                 cropped_img = img
             else:
                 cropped_img = img.crop((0, 0, w, y_target))
 
-            # temp png
+            # Scale
+            max_width = width_pt - 2 * MARGIN
+            scale = max_width / cropped_img.width
+            draw_w = cropped_img.width * scale
+            draw_h = cropped_img.height * scale
+
+            # Check if new page is required
+            if CURRENT_Y - draw_h < 0:
+                c.showPage()
+                CURRENT_Y = AVAILABLE_HEIGHT  # Reset Y
+
+            # Draw pic
+            x = (width_pt - draw_w) / 2
+            y = CURRENT_Y - draw_h 
+
             temp_png = folder / f"__temp_{png_path.stem}.png"
             cropped_img.save(temp_png, "PNG")
-
-            # scale image
-            img_width, img_height = cropped_img.size
-            scale_w = width_pt / img_width
-            scale_h = (height_pt * 0.9) / img_height # margin
-            scale = min(scale_w, scale_h)
-            draw_w = img_width * scale
-            draw_h = img_height * scale
-            x = (width_pt - draw_w) / 2
-            y = (height_pt - draw_h) / 2
-
             c.drawImage(str(temp_png), x, y, width=draw_w, height=draw_h)
-            c.showPage()  # New page
+            temp_png.unlink()
 
-            temp_png.unlink()  # Delete temp
+            CURRENT_Y -= draw_h + 10  # 10pt margin
 
         except Exception as e:
-            print(f"  ❌ Failed: {e}")
+            print(f"  ❌ Processing failed: {e}")
             continue
 
     c.save()
