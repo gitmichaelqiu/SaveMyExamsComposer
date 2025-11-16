@@ -123,7 +123,7 @@ def process_folder(folder: Path, main_writer: PdfWriter, answer_writer: PdfWrite
     c = canvas.Canvas(str(title_main_pdf), pagesize=A4)
     width, height = A4
     c.setFont("Helvetica-Bold", 24)
-    c.drawCentredString(width / 2, height - 150, "Answer Sheet")
+    c.drawCentredString(width / 2, height - 150, "Workout Sheet")
     c.setFont("Helvetica", 16)
     c.drawCentredString(width / 2, height - 200, f"Folder: {folder.name}")
     c.drawCentredString(width / 2, height - 230, f"Total Images: {len(png_files)}")
