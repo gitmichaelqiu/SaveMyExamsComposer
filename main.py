@@ -3,7 +3,7 @@ from pathlib import Path
 import re
 from datetime import datetime
 from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
 from reportlab.lib.utils import ImageReader
 import pytesseract
@@ -60,9 +60,35 @@ def natural_sort_key(name: str):
     suffix = match.group(2) or ''
     return (num, suffix)
 
-def add_title_page(c: canvas.Canvas, title: str):
-    """Adds a centered title page to the canvas."""
-    width_pt, height_pt = A4
+def add_main_title_page(c: canvas.Canvas, title: str, folder_list: list[str]):
+    """Adds the main title page with a list of folders."""
+    width_pt, height_pt = letter
+    
+    # Main Title
+    c.setFont("Helvetica-Bold", 24)
+    c.drawCentredString(width_pt / 2, height_pt - (2 * inch), title)
+    
+    # Subtitle (the list)
+    c.setFont("Helvetica", 12)
+    
+    # Start y-position for the list
+    y_pos = height_pt - (2.5 * inch)
+    line_height = 14 # 14 points
+    
+    for folder_name in folder_list:
+        c.drawCentredString(width_pt / 2, y_pos, folder_name)
+        y_pos -= line_height
+        
+        # Basic overflow handling: if list goes off-page, stop
+        if y_pos < (1 * inch):
+            c.drawCentredString(width_pt / 2, y_pos, "...")
+            break
+            
+    c.showPage()
+
+def add_folder_title_page(c: canvas.Canvas, title: str):
+    """Adds a centered title page for an individual folder."""
+    width_pt, height_pt = letter
     c.setFont("Helvetica-Bold", 24)
     c.drawCentredString(width_pt / 2, height_pt / 2, title)
     c.showPage()
@@ -72,7 +98,7 @@ def add_image_page(c: canvas.Canvas, img_to_draw: Image.Image | None, label: str
     Adds the PIL image to the canvas, scaled to fit, with an index label.
     If img_to_draw is None, it adds a placeholder page.
     """
-    width_pt, height_pt = A4
+    width_pt, height_pt = letter
     
     # Draw the index label
     c.setFont("Helvetica", 10)
@@ -141,21 +167,27 @@ def main():
     pdf_path_q = save_dir / pdf_name_q
     pdf_path_a = save_dir / pdf_name_a
 
-    c_questions = canvas.Canvas(str(pdf_path_q), pagesize=A4)
-    c_answers = canvas.Canvas(str(pdf_path_a), pagesize=A4)
+    c_questions = canvas.Canvas(str(pdf_path_q), pagesize=letter)
+    c_answers = canvas.Canvas(str(pdf_path_a), pagesize=letter)
 
     print(f"\nSaving Question PDF to: {pdf_path_q}")
     print(f"Saving Answer PDF to:   {pdf_path_a}")
     
+    # 3. Add the MAIN Title Page (new feature)
+    folder_names = [f.name for f in folder_paths]
+    add_main_title_page(c_questions, "Worksheet", folder_names)
+    add_main_title_page(c_answers, "Answer", folder_names)
+    
     question_index = 1
 
-    # 3. Process each folder
+    # 4. Process each folder
     for folder in folder_paths:
         print(f"\n--- Processing folder: {folder.name} ---")
 
-        # Add title pages for this folder
-        add_title_page(c_questions, folder.name)
-        add_title_page(c_answers, folder.name)
+        # Add individual folder title page ONLY if there are multiple folders
+        if len(folder_paths) > 1:
+            add_folder_title_page(c_questions, folder.name)
+            add_folder_title_page(c_answers, folder.name)
 
         # Find and sort PNG files
         png_files = [f for f in folder.glob("*.png")
@@ -170,7 +202,7 @@ def main():
         
         print(f"  ✅ {len(png_files)} PNGs found and sorted.")
 
-        # 4. Process each image in the folder
+        # 5. Process each image in the folder
         for i, png_path in enumerate(png_files, 1):
             print(f"  Processing {i}/{len(png_files)}: {png_path.name}")
             try:
@@ -201,7 +233,7 @@ def main():
                 print(f"    ❌ Failed to process {png_path.name}: {e}")
                 continue
 
-    # 5. Save the final PDFs
+    # 6. Save the final PDFs
     c_questions.save()
     c_answers.save()
     print("\n---")
