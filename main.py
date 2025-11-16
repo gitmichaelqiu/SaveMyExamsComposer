@@ -83,24 +83,67 @@ def create_title_page(pdf_path: Path, folder_name: str, n_images: int):
 
 
 def draw_image_on_canvas(c, img: Image.Image, width_pt, height_pt, MARGIN, CURRENT_Y):
-    """复用：将图片绘制到当前 PDF 页面，返回新 CURRENT_Y"""
-    max_width = width_pt - 2 * MARGIN
-    scale = max_width / img.width
-    draw_w = img.width * scale
-    draw_h = img.height * scale
+    """✅ 高清版：保持比例 + 高 DPI + 高质量缩放 + 无损保存"""
+    # === 高清参数 ===
+    TARGET_DPI = 150  # 推荐 150~300；200 平衡清晰度 & 文件大小
+    pt_to_inch = 1 / 72.0
+    max_width_inch = (width_pt - 2 * MARGIN) * pt_to_inch
+    max_height_inch = (height_pt - 2 * MARGIN - 20) * pt_to_inch
 
-    if CURRENT_Y - draw_h < 0:
+    # 计算目标像素尺寸（高 DPI）
+    max_width_px = int(max_width_inch * TARGET_DPI)
+    max_height_px = int(max_height_inch * TARGET_DPI)
+
+    # 按比例缩放（高质量）
+    img_ratio = img.width / img.height
+    target_ratio = max_width_px / max_height_px
+
+    if img.width > max_width_px or img.height > max_height_px:
+        if img_ratio > target_ratio:
+            new_w = max_width_px
+            new_h = int(new_w / img_ratio)
+        else:
+            new_h = max_height_px
+            new_w = int(new_h * img_ratio)
+        # ✅ 使用 LANCZOS（抗锯齿最佳）
+        resized_img = img.resize((new_w, new_h), Image.LANCZOS)
+    else:
+        resized_img = img.copy()  # 不缩放也 copy 避免影响原图
+
+    # 检查换页
+    img_height_pt = resized_img.height / TARGET_DPI * 72  # px → inch → pt
+    if CURRENT_Y - img_height_pt < 0:
         c.showPage()
         CURRENT_Y = height_pt - 2 * MARGIN
 
-    x = (width_pt - draw_w) / 2
-    y = CURRENT_Y - draw_h
+    # 居中位置（pt）
+    img_width_pt = resized_img.width / TARGET_DPI * 72
+    x = (width_pt - img_width_pt) / 2
+    y = CURRENT_Y - img_height_pt
+
+    # === 关键：高清保存 PNG ===
     temp_png = Path("__temp_draw.png")
-    img.save(temp_png, "PNG")
-    c.drawImage(str(temp_png), x, y, width=draw_w, height=draw_h)
+    resized_img.save(
+        temp_png,
+        "PNG",
+        dpi=(TARGET_DPI, TARGET_DPI),
+        optimize=False,          # 关闭优化（避免压缩）
+        compress_level=0,        # 无损压缩
+        # pnginfo 可加元数据（可选）
+    )
+
+    # ✅ 高清绘制：显式启用 preserveAspectRatio + anchor='c'
+    c.drawImage(
+        str(temp_png),
+        x, y,
+        width=img_width_pt,
+        height=img_height_pt,
+        preserveAspectRatio=True,   # 强制保持比例（双重保险）
+        anchor='c'                  # 居中锚点（更稳）
+    )
     temp_png.unlink(missing_ok=True)
 
-    return CURRENT_Y - draw_h - 10  # 更新 Y
+    return CURRENT_Y - img_height_pt - 10
 
 def process_folder(folder: Path, main_writer: PdfWriter, answer_writer: PdfWriter):
     """处理一个文件夹：生成主 PDF 和答案 PDF，并合并进总 writer"""
