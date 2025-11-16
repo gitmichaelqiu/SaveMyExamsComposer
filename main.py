@@ -26,17 +26,17 @@ def find_you_answered_y(img: Image.Image, lang="eng") -> int | None:
     data = pytesseract.image_to_data(thresh, output_type=pytesseract.Output.DICT, lang=lang, config=config)
 
     # Search "You answered" (allow partial march)
-    target_phrase = "You answered"
-    for i in range(len(data["text"])):
-        text = data["text"][i].strip()
-        if not text:
-            continue
+    # target_phrase = "You answered"
+    # for i in range(len(data["text"])):
+    #     text = data["text"][i].strip()
+    #     if not text:
+    #         continue
 
-        # Insensitive match
-        if target_phrase.lower() in text.lower():
-            y_orig = int(data["top"][i] * (img.height / thresh.height))
-            print(f"  🟢 OCR matched '{text}' @ y={y_orig}")
-            return y_orig
+    #     # Insensitive match
+    #     if target_phrase.lower() in text.lower():
+    #         y_orig = int(data["top"][i] * (img.height / thresh.height))
+    #         print(f"  🟢 OCR matched '{text}' @ y={y_orig}")
+    #         return y_orig
 
     # If not found, check you/answered separately
     for i in range(len(data["text"])):
