@@ -17,6 +17,7 @@ from PyPDF2 import PdfWriter, PdfReader
 
 # ——— CONFIG ———
 EXCLUDE_FILES = {"00_Result.png", "00_Result"}
+MARGIN = 20
 
 # Ensure PyPDF2 is installed
 try:
@@ -193,11 +194,9 @@ def process_folder(folder: Path, main_writer: PdfWriter, answer_writer: PdfWrite
     img_main_pdf = folder / "__img_main.pdf"
     img_answer_pdf = folder / "__img_answer.pdf"
 
-    # 主图片 PDF（问题部分）
+    # ——— 主图片 PDF（问题部分）———
     c = canvas.Canvas(str(img_main_pdf), pagesize=A4)
     width_pt, height_pt = A4
-    MARGIN = 20
-    CURRENT_Y = height_pt - 2 * MARGIN
     for png_path in png_files:
         try:
             img = Image.open(png_path)
@@ -207,7 +206,33 @@ def process_folder(folder: Path, main_writer: PdfWriter, answer_writer: PdfWrite
                 y_target = int(h * 0.45)
             y_target = max(1, min(y_target, h - 1))
             cropped = img.crop((0, 0, w, y_target))
-            CURRENT_Y = draw_image_on_canvas(c, cropped, width_pt, height_pt, MARGIN, CURRENT_Y)
+
+            # ✅ 你原始的高质量缩放逻辑（无拉伸！）
+            img_width, img_height = cropped.size
+            scale_w = width_pt / img_width
+            scale_h = (height_pt * 0.9) / img_height  # 保留 10% 边距
+            scale = min(scale_w, scale_h)
+            draw_w = img_width * scale
+            draw_h = img_height * scale
+            x = (width_pt - draw_w) / 2
+            y = (height_pt - draw_h) / 2  # 垂直居中
+
+            # 保存临时 PNG（高清参数）
+            temp_png = folder / f"__temp_{png_path.stem}.png"
+            cropped.save(temp_png, "PNG", dpi=(150, 150), optimize=False, compress_level=0)
+
+            # ✅ 关键：使用 preserveAspectRatio=True（双重保险）
+            c.drawImage(
+                str(temp_png),
+                x, y,
+                width=draw_w,
+                height=draw_h,
+                preserveAspectRatio=True,
+                anchor='c'
+            )
+            temp_png.unlink(missing_ok=True)
+            c.showPage()  # 每图一页
+
         except Exception as e:
             print(f"  ❌ Main image {png_path.name} failed: {e}")
     c.save()
